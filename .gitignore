@@ -1,0 +1,53 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+.ipynb_checkpoints/
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs and debug
+*.log
+logs/
+*.out
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Data / models (optional - adjust as needed)
+data/
+datasets/
+*.csv
+*.tsv
+*.json
+*.h5
+*.pkl
+*.ckpt
+*.pt
+*.pth
+
+# Checkpoints
+checkpoints/
+runs/
