@@ -1,53 +1,45 @@
-# Byte-compiled / cache files
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-
-# Virtual environments
-.venv/
-env/
-venv/
-ENV/
-.ipynb_checkpoints/
-
-# Environment variables / secrets
-.env
-.env.*
-
-# Build / distribution
-build/
-dist/
-*.egg-info/
-.eggs/
-
-# Logs and debug
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
 *.log
-logs/
+*.lot
 *.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
 
-# Jupyter Notebook
-.ipynb_checkpoints/
+# Editors / build dirs
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+*.maf
+*.mtc
+*.mtc0
+*.nav
+*.nlo
+*.snm
+*.vrb
 
-# IDE / editor files
+# VS Code
 .vscode/
-.idea/
-*.swp
+*.code-workspace
+
+# Python venv
+.venv/
+
+# Mac / Windows system files
 .DS_Store
-
-# Data / models (optional - adjust as needed)
-data/
-datasets/
-*.csv
-*.tsv
-*.json
-*.h5
-*.pkl
-*.ckpt
-*.pt
-*.pth
-
-# Checkpoints
-checkpoints/
-runs/
+Thumbs.db
