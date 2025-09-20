@@ -1,0 +1,96 @@
+\documentclass[12pt,a4paper]{report}
+
+% ------------------------------------------------
+% Packages
+% ------------------------------------------------
+\usepackage[utf8]{inputenc}       % Encoding
+\usepackage{amsmath, amssymb}     % Math symbols
+\usepackage{graphicx}             % Figures
+\usepackage{hyperref}             % Clickable refs
+\usepackage{natbib}               % References
+\usepackage{setspace}             % Line spacing
+\usepackage{geometry}             % Page layout
+\usepackage{listings}             % Code listings
+\usepackage{caption}              % Better captions
+
+% Page layout
+\geometry{margin=1in}
+\doublespacing
+
+% ------------------------------------------------
+% Metadata
+% ------------------------------------------------
+\title{Convergence and Stability in Deep Reinforcement Learning}
+\author{Sam Nguyen}
+\date{Honours Thesis \\ University of Sydney \\ 2025}
+
+% ------------------------------------------------
+% Document
+% ------------------------------------------------
+\begin{document}
+
+% Title page
+\maketitle
+
+% Abstract
+\begin{abstract}
+This thesis investigates the convergence and stability properties of reinforcement learning (RL) algorithms, with a focus on deep policy-gradient and value-based methods. We provide theoretical analysis supported by empirical validation on benchmark environments.
+\end{abstract}
+
+% Acknowledgements
+\chapter*{Acknowledgements}
+\addcontentsline{toc}{chapter}{Acknowledgements}
+I would like to thank my supervisors, colleagues, and family for their support.
+
+% Table of contents
+\tableofcontents
+\listoffigures
+\listoftables
+
+% ------------------------------------------------
+% Chapters
+% ------------------------------------------------
+
+\chapter{Introduction}
+- What is reinforcement learning?  
+- Why study convergence and stability?  
+- Research gap and contributions.  
+
+\chapter{Background}
+- RL foundations: MDPs, policies, value functions.  
+- The “deadly triad” (function approximation, bootstrapping, off-policy).  
+- Related work on convergence guarantees.  
+
+\chapter{Methodology}
+- Theoretical analysis of policy gradient methods.  
+- Error propagation in value-based methods.  
+- Experimental setup (environments, baselines, metrics).  
+
+\chapter{Experiments}
+- Describe environments (CartPole, Atari, MuJoCo, etc.).  
+- Present results with figures and tables.  
+- Compare stability across runs.  
+
+\chapter{Discussion}
+- Interpret results in light of theory.  
+- Limitations of experiments.  
+- Implications for future RL research.  
+
+\chapter{Conclusion}
+- Summary of contributions.  
+- Open questions and directions.  
+
+% ------------------------------------------------
+% References
+% ------------------------------------------------
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+% ------------------------------------------------
+% Appendices
+% ------------------------------------------------
+\appendix
+\chapter{Additional Proofs}
+\chapter{Experiment Details}
+
+\end{document}

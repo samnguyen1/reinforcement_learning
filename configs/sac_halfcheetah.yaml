@@ -1,0 +1,21 @@
+# SAC configuration for HalfCheetah
+algorithm: sac
+env_id: HalfCheetah-v4
+policy: MlpPolicy
+total_timesteps: 1000000
+seed: 0
+algo_params:
+  buffer_size: 1000000   # Replay buffer size
+  batch_size: 256        # Batch size for SAC updates
+  learning_rate: 3e-4    # Learning rate for policy and value networks
+  gamma: 0.99            # Discount factor
+  tau: 0.005             # Soft update coefficient for target networks
+  train_freq: 1          # Frequency of model training (in steps)
+  gradient_steps: 1      # Gradient updates per training step
+  ent_coef: auto         # Automatically tune entropy coefficient
+  target_entropy: auto   # Target entropy (auto defaults to -|action_space|)
+  use_sde: false         # SAC can also use SDE, but disabled by default
+verbose: 1
+checkpoint_freq: 0
+eval_freq: 0
+reward_threshold:
