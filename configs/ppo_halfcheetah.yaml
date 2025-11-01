@@ -1,0 +1,25 @@
+# PPO configuration for HalfCheetah
+algorithm: ppo
+env_id: HalfCheetah-v5
+policy: MlpPolicy
+total_timesteps: 1000000  # 1e6 timesteps
+seed: 0  # (will be overridden by command-line seed if provided)
+# Hyperparameters for PPO (many are left as default stable-baselines3 values)
+algo_params:
+  n_steps: 2048         # PPO rollout batch size per environment
+  batch_size: 64        # Minibatch size for each gradient update
+  n_epochs: 10          # Number of epochs to iterate over each batch of samples
+  gamma: 0.99           # Discount factor
+  gae_lambda: 0.95      # GAE lambda
+  clip_range: 0.2       # Clip range for PPO
+  ent_coef: 0.0         # Entropy coefficient (0 to disable entropy bonus)
+  learning_rate: 3e-4   # Initial learning rate (can be schedule or float)
+  vf_coef: 0.5          # Value function loss coefficient
+  max_grad_norm: 0.5    # Gradient clipping
+  use_sde: false        # Whether to use State-Dependent Exploration (False by default)
+  device: cpu
+verbose: 1              # Verbosity of SB3 (1 = progress prints, 0 = silent)
+# Logging and Callbacks
+checkpoint_freq: 0      # Set >0 to save periodic checkpoints (in timesteps)
+eval_freq: 0            # Set >0 for periodic eval (in timesteps) if using EvalCallback
+reward_threshold:       # Optional reward threshold for early stopping (not set here)

@@ -1,0 +1,23 @@
+# PPO configuration for Hopper with no entropy bonus (ent_coef = 0)
+algorithm: ppo
+env_id: Hopper-v5
+policy: MlpPolicy
+total_timesteps: 1000000
+seed: 0
+algo_params:
+  n_steps: 1024        # Shorter rollout length for faster learning updates in Hopper
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0        # No entropy bonus (encourages less exploration)
+  learning_rate: 3e-4
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_sde: false
+  device: cpu
+verbose: 1
+checkpoint_freq: 0
+eval_freq: 0
+reward_threshold:

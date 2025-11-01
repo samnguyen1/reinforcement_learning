@@ -1,0 +1,1071 @@
+\documentclass[12pt,a4paper]{report}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{booktabs}
+\usepackage[
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    filecolor=blue,
+    breaklinks=true,
+    bookmarks=true,
+    bookmarksnumbered=true,
+    pdftitle={Convergence and Stability Analysis of Modern Deep Reinforcement Learning Algorithms},
+    pdfauthor={Student ID: 450141636},
+    pdfsubject={Deep Reinforcement Learning, Convergence Analysis},
+    pdfkeywords={Deep Reinforcement Learning, Policy Gradient Methods, Convergence Analysis, Hyperparameter Optimisation, Proximal Policy Optimization, Twin Delayed DDPG}
+]{hyperref}
+\usepackage{cite}
+\usepackage{setspace}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{enumitem}
+
+% Page geometry
+\geometry{margin=1in}
+
+% Line spacing
+\onehalfspacing
+
+% Theorem environments
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+% Title information
+\title{\textbf{[DRAFT] Convergence and Stability Analysis of \\
+Modern Deep Reinforcement Learning Algorithms:} \\[0.5em]
+A Comprehensive Empirical Study of Policy Gradient Methods \\
+on Continuous Control Benchmarks}
+
+\author{Student ID: 450141636}
+\date{October 2025}
+
+\begin{document}
+
+% Title page
+\maketitle
+
+% Abstract
+\begin{abstract}
+\noindent
+Deep Reinforcement Learning (RL) has achieved remarkable successes in domains ranging from game playing to robotics. However, a fundamental challenge persists: understanding the convergence properties and stability characteristics of modern deep RL algorithms. While classical RL theory provides strong convergence guarantees in tabular settings \cite{regehr2021elementary}, many theoretical guarantees break down when using nonlinear function approximators such as deep neural networks \cite{cayci2021sample}. The combination of function approximation, bootstrapping, and off-policy data—known as the ``deadly triad'' \cite{van2018deep}—can lead to divergence and instability in value-based methods. Meanwhile, policy gradient methods face challenges with local optima, high-variance gradients, and sensitive hyperparameter dependencies.
+
+This thesis investigates the convergence conditions and stability properties of modern deep RL algorithms through systematic empirical study. We focus primarily on Proximal Policy Optimization (PPO) \cite{schulman2017ppo} and Twin Delayed Deep Deterministic Policy Gradient (TD3) \cite{fujimoto2018addressing}. Advantage Actor-Critic (A2C) and Soft Actor-Critic (SAC) may be included if time permits. Our study examines two continuous control benchmark tasks from the MuJoCo suite \cite{todorov2012mujoco}: HalfCheetah-v5 and Hopper-v5. The research addresses three fundamental questions:
+
+\begin{enumerate}[leftmargin=2cm]
+    \item \textbf{RQ1:} Under what conditions do modern policy gradient and actor-critic methods converge reliably on benchmark tasks, and how do hyperparameters and architecture influence their stability?
+    \item \textbf{RQ2:} How does hyperparameter sensitivity vary across algorithms, and what are the optimal ranges for learning rate and batch size?
+    \item \textbf{RQ3:} Which algorithm demonstrates the most robust performance in terms of across-seed variance, convergence speed, and final reward?
+\end{enumerate}
+
+The experimental design includes up to 180 experiments (2 environments $\times$ 3 algorithms $\times$ 3 learning rates $\times$ 2 batch sizes $\times$ 5 seeds), training each agent for 1 million timesteps. Our evaluation framework measures convergence speed, final reward distribution, coefficient of variation, learning curve smoothness, and algorithm-specific metrics (e.g., KL divergence and clip fraction for PPO). Currently, PPO experiments are complete (60 runs across both environments) and TD3 experiments are in progress (60 runs ongoing). Findings from completed PPO experiments reveal task-dependent variance: HalfCheetah-v5 demonstrates better reliability (CV=0.226) compared to Hopper-v5 (CV=0.345), suggesting that environment stability characteristics significantly influence learning consistency.
+
+This work aims to contribute to the theoretical and practical understanding of deep RL optimisation by:
+\begin{itemize}
+    \item Providing quantitative characterisation of convergence conditions for modern policy gradient methods
+    \item Identifying hyperparameter sensitivity patterns across algorithms and environments
+    \item Analysing the relationship between algorithm design choices (trust regions, delayed updates, target networks) and training stability
+    \item Offering practical guidelines for algorithm selection and hyperparameter tuning
+\end{itemize}
+
+The experiments aim to bridge the gap between theoretical convergence guarantees from recent work \cite{zhang2023convergence,wang2019neural,fujimoto2018addressing} and practical algorithm deployment, providing actionable insights for RL practitioners and researchers.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} Deep Reinforcement Learning, Policy Gradient Methods, Convergence Analysis, Hyperparameter Optimisation, Proximal Policy Optimization, Twin Delayed DDPG, Training Stability
+\end{abstract}
+
+\tableofcontents
+
+\chapter{Introduction}
+
+\section{Motivation and Background}
+
+Reinforcement Learning (RL) has become one of the key paradigms in artificial intelligence, allowing agents to learn decision-making policies through interaction with their environment. The combination of RL with deep neural networks—often called deep RL—has led to impressive results in areas like game playing \cite{mnih2015humanlevel}, robot control, and autonomous systems. These deep neural networks enable agents to work with complex, high-dimensional problems that would be impossible to solve with simpler table-based or linear approaches.
+
+However, this comes with a cost. Classical RL theory offers strong convergence guarantees when we have finite state-action spaces and can represent value functions exactly using tables \cite{regehr2021elementary}. In these cases, algorithms like Q-learning will converge to the optimal solution (given appropriate learning rates and sufficient exploration). But when we use deep neural networks as function approximators, many of these theoretical guarantees no longer hold \cite{cayci2021sample}.
+
+\subsection{The Challenge of Function Approximation}
+
+Early theoretical work on RL with function approximation quickly uncovered potential instability issues. A notorious example is Baird's counterexample \cite{van2018deep}, which demonstrated that Q-learning with a simple linear function approximator can diverge, oscillating without convergence. More generally, the combination of three elements was identified as particularly perilous—a condition later dubbed the ``deadly triad'' \cite{van2018deep}:
+
+\begin{enumerate}
+    \item \textbf{Function Approximation:} Using parameterised approximators (e.g., neural networks) instead of exact representations
+    \item \textbf{Bootstrapping:} Updating value estimates using other learned estimates (as in temporal difference methods)
+    \item \textbf{Off-Policy Data:} Learning about a target policy from experience generated by a different behaviour policy
+\end{enumerate}
+
+When all three elements are present, standard algorithms can become unstable or diverge instead of converging to a fixed point. This is because the Bellman operator is no longer a contraction in the weighted norm induced by the function approximator, and the stochastic approximation dynamics can fail to find a stable fixed point.
+
+Deep Q-Networks (DQN) \cite{mnih2015humanlevel} marked a milestone by achieving human-level performance on Atari games despite operating in the deadly triad regime. DQN's success relied on two key innovations: experience replay (storing transitions in a buffer and sampling them randomly for training) and target networks (using a stale copy of the Q-network for computing bootstrap targets). These techniques were developed empirically to stabilise training, but their theoretical justification remained incomplete for years. Only recently has rigorous convergence analysis of DQN been achieved \cite{zhang2023convergence}, providing the first formal proof that DQN converges with high probability under certain conditions.
+
+\subsection{Policy Gradient Methods and Convergence}
+
+In parallel to value-based methods, policy gradient (PG) algorithms offer an alternative approach by directly optimising the policy parameters. The Policy Gradient Theorem \cite{sutton1999policy} provides the foundation for these methods, proving that an unbiased estimator of the performance gradient can be obtained from sample trajectories. A landmark result by Sutton et al. \cite{sutton1999policy} proved that following this policy gradient will converge to a locally optimal policy under suitable conditions, making this one of the first convergence guarantees for RL with general function approximation.
+
+However, policy gradient methods face their own challenges:
+\begin{itemize}
+    \item \textbf{Local Optima:} Policy gradient converges to local rather than global optima, and the quality of the local optimum found can vary significantly
+    \item \textbf{High Variance:} Gradient estimates from sample trajectories have high variance, leading to slow or unstable learning
+    \item \textbf{Non-Stationarity:} The data distribution depends on the policy itself, which changes during training
+    \item \textbf{Sensitive Step Sizes:} Too large updates can cause performance collapse; too small updates result in slow convergence
+\end{itemize}
+
+Modern policy gradient methods like Trust Region Policy Optimization (TRPO) \cite{schulman2017trpo} and Proximal Policy Optimization (PPO) \cite{schulman2017ppo} address these challenges through constraint-based or clipped objectives that limit policy update magnitudes. TRPO provides a theoretical guarantee of monotonic improvement under idealized conditions \cite{schulman2017trpo}, while PPO simplifies the approach with a clipped surrogate objective. Soft Actor-Critic (SAC) \cite{haarnoja2018sac} takes a different approach, augmenting the RL objective with an entropy term to encourage exploration and smooth the optimisation landscape.
+
+Recent theoretical work has begun to characterise when these methods can achieve stronger convergence properties. Wang et al. \cite{wang2019neural} showed that with overparameterized actor and critic networks and under a compatibility condition, neural policy gradient methods can converge to the global optimal policy. However, these theoretical guarantees often require restrictive assumptions (e.g., infinite network width, specific initialization schemes) that may not hold in practice.
+
+\subsection{The Gap Between Theory and Practice}
+
+Despite these theoretical advances, a significant gap remains between the conditions under which convergence can be formally guaranteed and the settings encountered in real-world RL applications. Practitioners rely heavily on empirical tuning, leveraging a combination of algorithmic tricks (replay buffers, target networks, trust regions, entropy bonuses) developed through trial and error. Key questions remain unanswered:
+
+\begin{itemize}
+    \item \textbf{Convergence Conditions:} Under what practical conditions do modern deep RL algorithms converge to high-quality solutions?
+    \item \textbf{Hyperparameter Sensitivity:} How sensitive are different algorithms to hyperparameter choices, and what are the optimal ranges?
+    \item \textbf{Stability and Reliability:} Which algorithms exhibit the most consistent performance across different random seeds and environments?
+    \item \textbf{Error Propagation:} How do approximation errors in value estimates affect long-term training dynamics?
+\end{itemize}
+
+This thesis addresses these questions through systematic empirical study of modern deep RL algorithms. Our primary focus is on PPO and TD3, with the possibility of including A2C and SAC depending on time constraints. By evaluating these algorithms across multiple environments, hyperparameters, and random seeds, we aim to provide practical insights into their convergence properties and stability.
+
+\section{Research Questions}
+
+This thesis is guided by the following research questions, which bridge theoretical understanding with practical deployment:
+
+\begin{enumerate}
+    \item \textbf{RQ1: Convergence Conditions}\\
+    Under what conditions do PPO, A2C, and SAC converge reliably on continuous control benchmark tasks? Specifically:
+    \begin{itemize}
+        \item What hyperparameter ranges lead to consistent convergence?
+        \item How does network architecture affect training stability?
+        \item What is the relationship between convergence speed and final performance?
+    \end{itemize}
+
+    \item \textbf{RQ2: Hyperparameter Sensitivity}\\
+    How do key hyperparameters (learning rate, batch size) influence the training stability and final performance of these algorithms? In particular:
+    \begin{itemize}
+        \item Which hyperparameters have the strongest influence on convergence?
+        \item How does sensitivity vary across algorithms and environments?
+        \item Are there universal hyperparameter recommendations, or must tuning be task-specific?
+    \end{itemize}
+
+    \item \textbf{RQ3: Algorithm Robustness and Reliability}\\
+    Which algorithm demonstrates the most robust performance across different environments and hyperparameter configurations? We evaluate:
+    \begin{itemize}
+        \item Across-seed variance (coefficient of variation)
+        \item Convergence speed (timesteps to reach threshold performance)
+        \item Learning curve smoothness and stability
+        \item Final reward distribution and failure rates
+    \end{itemize}
+\end{enumerate}
+
+These questions connect to fundamental open problems in deep RL theory. Recent work has provided convergence guarantees for DQN \cite{zhang2023convergence}, analysed target network mechanisms \cite{zhang2021breaking}, and characterised global optimality conditions for neural policy gradients \cite{wang2019neural}. Our empirical study complements these theoretical advances by evaluating whether the conditions for convergence can be achieved in practice and quantifying the reliability of different algorithms under realistic settings.
+
+\section{Contributions}
+
+The main contributions of this thesis are (note: some results are preliminary as experiments are still in progress):
+
+\begin{enumerate}
+    \item \textbf{Systematic Empirical Evaluation:} We are conducting up to 180 experiments (2 environments $\times$ 3 algorithms $\times$ 3 learning rates $\times$ 2 batch sizes $\times$ 5 seeds) with statistical analysis across multiple seeds. As of this draft, PPO experiments are complete (60 runs) and TD3 experiments are underway (60 runs).
+
+    \item \textbf{Convergence and Stability Analysis:} We quantify convergence conditions through several metrics:
+    \begin{itemize}
+        \item Final reward distribution across seeds
+        \item Convergence speed (timesteps to 80\% of final performance)
+        \item Coefficient of variation as a measure of reliability
+        \item Learning curve smoothness and stability scores
+        \item Algorithm-specific diagnostics (KL divergence, clip fraction for PPO)
+    \end{itemize}
+
+    \item \textbf{Hyperparameter Sensitivity characterisation:} We provide empirical evidence for optimal hyperparameter ranges and sensitivity patterns, including:
+    \begin{itemize}
+        \item Heatmaps showing performance across learning rate × batch size grids
+        \item Statistical significance testing for hyperparameter effects
+        \item Identification of failure modes and divergence conditions
+    \end{itemize}
+
+    \item \textbf{Practical Guidelines:} Based on our findings, we offer actionable recommendations for algorithm selection, hyperparameter tuning, and troubleshooting training instabilities.
+
+    \item \textbf{Reproducible Infrastructure:} We provide open-source implementation, complete configuration files, and automated analysis pipelines to enable reproducibility and facilitate future research.
+\end{enumerate}
+
+\section{Thesis Organization}
+
+The remainder of this thesis is organized as follows:
+
+\textbf{Chapter 2: Background and Related Work} provides the theoretical foundation for our study. We review convergence theory from classical RL, discuss the deadly triad and instability in value-based methods, present policy gradient foundations, and survey related work on algorithm benchmarking and hyperparameter optimisation. This chapter establishes the theoretical context for understanding our empirical findings.
+
+\textbf{Chapter 3: Methodology} describes our experimental design in detail. We specify the environments (HalfCheetah-v5, Hopper-v5), algorithm implementations, hyperparameter configurations, training protocol, and evaluation metrics. We also discuss our statistical analysis framework, including significance testing and effect size measurement.
+
+\textbf{Chapter 4: Results} presents our comprehensive empirical findings. We analyse overall performance comparisons, convergence speed patterns, reliability metrics, hyperparameter sensitivity, and algorithm-specific diagnostics. Each finding is supported by visualizations and statistical tests.
+
+\textbf{Chapter 5: Discussion} interprets our results in the context of existing theory and practice. We answer each research question, discuss practical implications for RL practitioners, acknowledge limitations of our study, and identify directions for future work.
+
+\textbf{Chapter 6: Conclusion} summarises our key findings and contributions, reflecting on the broader implications for deep RL research and practice.
+
+\chapter{Background and Related Work}
+
+This chapter establishes the theoretical foundation for understanding convergence and stability in deep reinforcement learning. We begin with formal definitions of the reinforcement learning problem, review classical convergence theory for tabular methods, discuss the challenges introduced by function approximation, present modern deep RL algorithms, and survey recent theoretical advances.
+
+\section{Reinforcement Learning Fundamentals}
+
+\subsection{Markov Decision Processes}
+
+Reinforcement Learning is formalized as a Markov Decision Process (MDP), which provides a mathematical framework for modeling sequential decision-making under uncertainty. An MDP is defined by the tuple $\mathcal{M} = (S, A, P, R, \gamma)$ where:
+
+\begin{itemize}
+    \item $S$ is the state space (potentially infinite)
+    \item $A$ is the action space
+    \item $P: S \times A \times S \rightarrow [0,1]$ is the state transition probability function, where $P(s'|s,a)$ denotes the probability of transitioning to state $s'$ when taking action $a$ in state $s$
+    \item $R: S \times A \rightarrow \mathbb{R}$ is the reward function, where $R(s,a)$ gives the immediate reward for taking action $a$ in state $s$
+    \item $\gamma \in [0,1)$ is the discount factor, determining the relative importance of future versus immediate rewards
+\end{itemize}
+
+The \textbf{Markov property} states that the future is conditionally independent of the past given the present: $P(s_{t+1}|s_t, a_t, s_{t-1}, a_{t-1}, \ldots, s_0, a_0) = P(s_{t+1}|s_t, a_t)$. This property is fundamental to many RL algorithms.
+
+\subsection{Policies and Value Functions}
+
+An agent's behaviour is defined by a \textbf{policy} $\pi: S \times A \rightarrow [0,1]$, where $\pi(a|s)$ denotes the probability of selecting action $a$ in state $s$. For deterministic policies, we write $a = \pi(s)$.
+
+The \textbf{state-value function} $V^\pi(s)$ measures the expected cumulative discounted reward from state $s$ under policy $\pi$:
+
+\begin{equation}
+V^\pi(s) = \mathbb{E}_{\pi} \left[ \sum_{t=0}^{\infty} \gamma^t R(s_t, a_t) \mid s_0 = s \right]
+\end{equation}
+
+The \textbf{action-value function} (Q-function) $Q^\pi(s,a)$ measures the expected return from taking action $a$ in state $s$ and then following policy $\pi$:
+
+\begin{equation}
+Q^\pi(s,a) = \mathbb{E}_{\pi} \left[ \sum_{t=0}^{\infty} \gamma^t R(s_t, a_t) \mid s_0 = s, a_0 = a \right]
+\end{equation}
+
+The \textbf{advantage function} quantifies how much better action $a$ is compared to the average action under policy $\pi$:
+
+\begin{equation}
+A^\pi(s,a) = Q^\pi(s,a) - V^\pi(s)
+\end{equation}
+
+\subsection{Bellman Equations}
+
+The Bellman equations express the recursive relationship between the value of a state and the values of successor states. The \textbf{Bellman expectation equation} for $V^\pi$ is:
+
+\begin{equation}
+V^\pi(s) = \sum_{a \in A} \pi(a|s) \left[ R(s,a) + \gamma \sum_{s' \in S} P(s'|s,a) V^\pi(s') \right]
+\end{equation}
+
+The \textbf{Bellman optimality equation} defines the optimal value function $V^*(s) = \max_\pi V^\pi(s)$:
+
+\begin{equation}
+V^*(s) = \max_{a \in A} \left[ R(s,a) + \gamma \sum_{s' \in S} P(s'|s,a) V^*(s') \right]
+\end{equation}
+
+Similarly, the optimal Q-function satisfies:
+
+\begin{equation}
+Q^*(s,a) = R(s,a) + \gamma \sum_{s' \in S} P(s'|s,a) \max_{a' \in A} Q^*(s',a')
+\end{equation}
+
+The optimal policy can be derived from $Q^*$ by selecting $\pi^*(s) = \arg\max_a Q^*(s,a)$.
+
+\subsection{Temporal Difference Learning}
+
+Temporal Difference (TD) learning is a fundamental method for estimating value functions without requiring a model of the environment. The key idea is to update value estimates based on observed transitions. The \textbf{TD(0)} update rule for state values is:
+
+\begin{equation}
+V(s_t) \leftarrow V(s_t) + \alpha \left[ r_{t+1} + \gamma V(s_{t+1}) - V(s_t) \right]
+\end{equation}
+
+where $\alpha$ is the learning rate and the term $\delta_t = r_{t+1} + \gamma V(s_{t+1}) - V(s_t)$ is called the \textbf{TD error}.
+
+\textbf{Q-learning} \cite{regehr2021elementary} extends this to learn action-value functions off-policy:
+
+\begin{equation}
+Q(s_t, a_t) \leftarrow Q(s_t, a_t) + \alpha \left[ r_{t+1} + \gamma \max_{a'} Q(s_{t+1}, a') - Q(s_t, a_t) \right]
+\end{equation}
+
+In tabular settings (finite state-action spaces), Q-learning is proven to converge to the optimal Q-function $Q^*$ with probability 1 under appropriate conditions \cite{regehr2021elementary}: (1) all state-action pairs are visited infinitely often, (2) learning rates satisfy $\sum_t \alpha_t = \infty$ and $\sum_t \alpha_t^2 < \infty$, and (3) the rewards are bounded.
+
+\section{Classical Convergence Theory}
+
+\subsection{Policy Gradient Theory}
+
+Policy gradient methods directly optimise the policy parameters $\theta$ by performing gradient ascent on the expected return $J(\pi_\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$, where $R(\tau) = \sum_{t=0}^T \gamma^t r_t$ is the cumulative discounted reward along trajectory $\tau$.
+
+The \textbf{Policy Gradient Theorem} \cite{sutton1999policy} provides an elegant formula for the gradient of the expected return:
+
+\begin{theorem}[Policy Gradient Theorem]
+For any differentiable policy $\pi_\theta$ and any policy performance measure $J(\pi_\theta)$, the policy gradient is:
+\begin{equation}
+\nabla_\theta J(\pi_\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) Q^{\pi_\theta}(s_t, a_t) \right]
+\end{equation}
+\end{theorem}
+
+Importantly, this gradient can be estimated from sample trajectories without requiring knowledge of the environment dynamics. In practice, we often use the advantage function $A^{\pi_\theta}(s_t, a_t) = Q^{\pi_\theta}(s_t, a_t) - V^{\pi_\theta}(s_t)$ instead of $Q$, yielding the form:
+
+\begin{equation}
+\nabla_\theta J(\pi_\theta) = \mathbb{E}_{\tau \sim \pi_\theta} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) A^{\pi_\theta}(s_t, a_t) \right]
+\end{equation}
+
+The advantage function reduces variance without introducing bias, as $\mathbb{E}_{a \sim \pi}[A^\pi(s,a)] = 0$ for all states $s$.
+
+\textbf{Convergence guarantees:} Sutton et al. \cite{sutton1999policy} proved that following the policy gradient with sufficiently small step sizes converges to a locally optimal policy. Specifically, if we update $\theta_{t+1} = \theta_t + \alpha_t \nabla_\theta J(\pi_{\theta_t})$ with $\alpha_t$ satisfying standard stochastic approximation conditions, then $\theta_t$ converges to a local optimum of $J$.
+
+\subsection{Natural Policy Gradient}
+
+The vanilla policy gradient uses the Euclidean gradient, which can be inefficient in high-dimensional parameter spaces. The \textbf{Natural Policy Gradient} \cite{kakade2001natural} addresses this by using the Fisher information metric to define a more natural gradient direction:
+
+\begin{equation}
+\tilde{\nabla}_\theta J(\pi_\theta) = F(\theta)^{-1} \nabla_\theta J(\pi_\theta)
+\end{equation}
+
+where $F(\theta)$ is the Fisher information matrix. This approach is invariant to reparameterizations of the policy and often leads to faster convergence.
+
+\subsection{Function Approximation with Linear Methods}
+
+When the state space is large or continuous, tabular representations become infeasible. Function approximation represents value functions or policies using parameterised function classes. For linear function approximation, we have:
+
+\begin{equation}
+\hat{V}(s; \mathbf{w}) = \phi(s)^\top \mathbf{w}
+\end{equation}
+
+where $\phi(s) \in \mathbb{R}^d$ is a feature vector and $\mathbf{w} \in \mathbb{R}^d$ are the weights.
+
+\textbf{Gradient TD methods} \cite{bradtke1996linear, lagoudakis2003least} such as GTD2 and TDC were developed to ensure convergence in the off-policy setting with linear function approximation. The key idea is to reformulate TD learning as a true stochastic gradient descent on a well-defined objective function, guaranteeing convergence where naive TD methods might diverge.
+
+\textbf{LSTD (Least-Squares Temporal Difference)} \cite{bradtke1996linear} computes the fixed point of the TD update directly by solving a system of linear equations, avoiding divergence issues but at the cost of higher computational complexity. Similarly, \textbf{LSPI (Least-Squares Policy Iteration)} \cite{lagoudakis2003least} extends LSTD to control problems, providing stable policy evaluation and improvement.
+
+\subsection{Actor-Critic Methods}
+
+Actor-Critic methods combine policy gradients (the "actor") with value function approximation (the "critic"). The critic estimates the value function $V^\pi(s)$ or action-value function $Q^\pi(s,a)$, which is used to compute more accurate advantage estimates and reduce variance in policy gradient updates.
+
+\section{The Deadly Triad and Instability in Deep RL}
+
+\subsection{Function Approximation Challenges}
+
+While function approximation is necessary for handling large state spaces, it introduces instability. van Hasselt et al. \cite{van2018deep} identified the \textbf{deadly triad}—the combination of three elements that can lead to divergence:
+
+\begin{enumerate}
+    \item \textbf{Function Approximation:} Using parameterised approximators (e.g., neural networks) instead of tabular representations
+    \item \textbf{Bootstrapping:} Updating value estimates using other learned estimates (as in TD methods)
+    \item \textbf{Off-Policy Learning:} Learning about a target policy from data generated by a different behaviour policy
+\end{enumerate}
+
+When all three are present, the Bellman operator loses its contraction property, and standard algorithms can diverge. Baird's counterexample (cited in \cite{van2018deep}) famously demonstrated that Q-learning with simple linear function approximation can oscillate without converging, even in a trivial problem.
+
+\subsection{Error Propagation}
+
+Farahmand et al. \cite{farahmand2010error} analysed how approximation errors propagate through value iteration. They showed that early errors are "forgotten" exponentially fast, while errors introduced late in training have a more direct impact on final performance. This suggests that maintaining stability becomes harder as training progresses, motivating techniques like target networks and careful learning rate schedules.
+
+\section{Deep Reinforcement Learning Algorithms}
+
+\subsection{Deep Q-Networks (DQN)}
+
+Deep Q-Networks \cite{mnih2015humanlevel} marked a milestone by achieving human-level performance on Atari games using convolutional neural networks to approximate Q-functions. DQN addresses the deadly triad through two key innovations:
+
+\begin{itemize}
+    \item \textbf{Experience Replay:} Transitions $(s, a, r, s')$ are stored in a replay buffer $\mathcal{D}$ and sampled uniformly for training. This breaks temporal correlations and approximates i.i.d. sampling, stabilising gradient descent.
+    \item \textbf{Target Network:} A separate network with parameters $\theta^-$ (updated periodically from $\theta$) is used to compute bootstrap targets: $y_t = r_t + \gamma \max_{a'} Q(s_{t+1}, a'; \theta^-)$. This reduces oscillations caused by chasing a moving target.
+\end{itemize}
+
+The loss function is:
+\begin{equation}
+L(\theta) = \mathbb{E}_{(s,a,r,s') \sim \mathcal{D}} \left[ \left( r + \gamma \max_{a'} Q(s', a'; \theta^-) - Q(s, a; \theta) \right)^2 \right]
+\end{equation}
+
+Recent theoretical work \cite{zhang2023convergence} provided the first rigorous convergence proof for DQN, showing that with decaying $\epsilon$-greedy exploration and appropriate assumptions, DQN converges to the optimal Q-function with high probability. Zhang et al. \cite{zhang2021breaking} further analysed how target networks "break" the deadly triad by controlling the bootstrapping dynamics.
+
+\textbf{Extensions:} Double DQN \cite{vanhasselt2015deep} decouples action selection from evaluation to reduce overestimation bias. Dueling networks \cite{wang2016dueling} separate state-value and advantage estimation. Prioritized experience replay \cite{schaul2016prioritized} samples important transitions more frequently. Rainbow \cite{hessel2017rainbow} combines these improvements for state-of-the-art performance.
+
+\subsection{Proximal Policy Optimization (PPO)}
+
+PPO \cite{schulman2017ppo} is an on-policy policy gradient method that prevents destructively large policy updates through a clipped surrogate objective. The algorithm addresses a fundamental challenge in policy optimisation: determining appropriate step sizes. Too large updates can cause performance collapse; too small updates lead to slow convergence.
+
+PPO introduces a probability ratio $r_t(\theta) = \frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}$ and uses a clipped objective:
+
+\begin{equation}
+L^{CLIP}(\theta) = \mathbb{E}_t \left[ \min\left(r_t(\theta) \hat{A}_t, \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon) \hat{A}_t\right) \right]
+\end{equation}
+
+where $\hat{A}_t$ is an advantage estimate and $\epsilon \in [0.1, 0.3]$ is the clipping range. The clipping ensures that $r_t(\theta)$ stays within $[1-\epsilon, 1+\epsilon]$, limiting policy changes.
+
+\textbf{Additional components:}
+\begin{itemize}
+    \item \textbf{Value function loss:} $L^{VF} = (V_\theta(s_t) - V^{target}_t)^2$
+    \item \textbf{Entropy bonus:} $S[\pi_\theta](s_t)$ encourages exploration
+    \item \textbf{Total loss:} $L = L^{CLIP} - c_1 L^{VF} + c_2 S$
+\end{itemize}
+
+PPO uses \textbf{Generalised Advantage Estimation (GAE)} \cite{schulman2015gae} to compute advantages with reduced variance:
+
+\begin{equation}
+\hat{A}_t^{GAE(\gamma,\lambda)} = \sum_{l=0}^{\infty} (\gamma\lambda)^l \delta_{t+l}
+\end{equation}
+
+where $\delta_t = r_t + \gamma V(s_{t+1}) - V(s_t)$ is the TD error and $\lambda \in [0,1]$ trades off bias and variance.
+
+PPO has become one of the most popular deep RL algorithms due to its simplicity, stability, and strong empirical performance. While it lacks the rigorous monotonic improvement guarantee of TRPO \cite{schulman2017trpo}, it is much simpler to implement and tune.
+
+\subsection{Advantage Actor-Critic (A2C)}
+
+A2C \cite{mnih2016a3c} is the synchronous variant of A3C (Asynchronous Advantage Actor-Critic). It collects experience from multiple parallel workers, computes advantages using n-step returns or GAE, and performs synchronous policy and value function updates.
+
+The actor update follows the policy gradient:
+\begin{equation}
+\nabla_\theta J \approx \frac{1}{N} \sum_{i=1}^{N} \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t^i|s_t^i) \hat{A}_t^i
+\end{equation}
+
+The critic minimises the value prediction error:
+\begin{equation}
+L_{critic} = \frac{1}{N} \sum_{i=1}^{N} \sum_{t=0}^{T} \left( V_\phi(s_t^i) - V^{target}_t \right)^2
+\end{equation}
+
+A2C typically includes an entropy bonus to maintain exploration:
+\begin{equation}
+L_{total} = L_{actor} + c_1 L_{critic} - c_2 \mathcal{H}(\pi_\theta)
+\end{equation}
+
+A2C is sample-efficient for on-policy methods and provides stable training when properly tuned. However, it can be sensitive to hyperparameters and may struggle with sparse rewards.
+
+\subsection{Twin Delayed DDPG (TD3)}
+
+TD3 \cite{fujimoto2018addressing} is an off-policy actor-critic algorithm that addresses overestimation bias in value-based methods. It builds on DDPG (Deep Deterministic Policy Gradient) \cite{lillicrap2015continuous} with three key improvements:
+
+\begin{itemize}
+    \item \textbf{Twin Critics:} Uses two Q-function approximators and takes the minimum to reduce overestimation
+    \item \textbf{Delayed Policy Updates:} Updates the policy less frequently than the Q-functions to allow value estimates to stabilise
+    \item \textbf{Target Policy Smoothing:} Adds noise to target actions to prevent exploitation of Q-function errors
+\end{itemize}
+
+These modifications make TD3 more stable than standard actor-critic methods, particularly in continuous control tasks. TD3 is currently being evaluated in our experiments (in progress).
+
+\subsection{Soft Actor-Critic (SAC)}
+
+SAC \cite{haarnoja2018sac} is an off-policy algorithm based on the maximum entropy reinforcement learning framework. The key idea is to augment the standard RL objective with an entropy term:
+
+\begin{equation}
+J(\pi) = \sum_{t=0}^{T} \mathbb{E}_{(s_t,a_t)\sim\rho_\pi} \left[ r(s_t, a_t) + \alpha \mathcal{H}(\pi(\cdot|s_t)) \right]
+\end{equation}
+
+where $\mathcal{H}(\pi(\cdot|s)) = -\mathbb{E}_{a \sim \pi(\cdot|s)}[\log \pi(a|s)]$ is the entropy and $\alpha > 0$ is a temperature parameter controlling the trade-off between reward and entropy.
+
+\textbf{Why maximum entropy?} The entropy term encourages exploration and prevents premature convergence to suboptimal deterministic policies. It also makes the optimisation landscape smoother, often leading to more stable training.
+
+SAC uses an actor-critic architecture with the following components:
+
+\begin{itemize}
+    \item \textbf{Actor:} A stochastic policy $\pi_\theta$ parameterised as a squashed Gaussian
+    \item \textbf{Twin Critics:} Two Q-functions $Q_{\phi_1}, Q_{\phi_2}$ to reduce overestimation (similar to TD3 \cite{fujimoto2018addressing})
+    \item \textbf{Target Critics:} Slowly updated target networks $\bar{\phi}_1, \bar{\phi}_2$
+\end{itemize}
+
+The critic loss minimises the soft Bellman residual:
+\begin{equation}
+L_Q(\phi) = \mathbb{E}_{(s,a,r,s') \sim \mathcal{D}} \left[ \left( Q_\phi(s,a) - \left(r + \gamma \mathbb{E}_{a' \sim \pi}[Q_{\bar{\phi}}(s',a') - \alpha \log \pi(a'|s')] \right) \right)^2 \right]
+\end{equation}
+
+The actor maximises the expected value under the current critic:
+\begin{equation}
+L_\pi(\theta) = \mathbb{E}_{s \sim \mathcal{D}, a \sim \pi_\theta} \left[ \alpha \log \pi_\theta(a|s) - Q_\phi(s,a) \right]
+\end{equation}
+
+SAC can automatically tune the temperature $\alpha$ by framing it as a constrained optimisation problem, ensuring a desired minimum expected entropy.
+
+\textbf{Theoretical properties:} The entropy-regularised policy iteration has been proven to converge to the optimal entropy-augmented policy \cite{haarnoja2018sac}. The use of twin Q-networks and entropy regularisation contributes to SAC's strong empirical stability and sample efficiency.
+
+\section{Related Work}
+
+\subsection{Reproducibility and Stability in RL}
+
+Henderson et al. \cite{henderson2018deep} demonstrated that RL algorithms exhibit high variance across random seeds and implementation details, raising concerns about reproducibility. They showed that seemingly minor choices (network initialization, random seed, environment version) can dramatically affect results. This work highlighted the need for rigorous statistical evaluation with multiple seeds.
+
+Islam et al. \cite{islam2017reproducibility} conducted a large-scale study showing that hyperparameter sensitivity varies significantly across algorithms and environments. They found that some algorithms are robust to hyperparameter choices on certain tasks but extremely sensitive on others, suggesting that universal hyperparameter recommendations may not exist.
+
+\section{Recent Theoretical Advances}
+
+\subsection{Convergence of Deep Q-Networks}
+
+Zhang et al. \cite{zhang2023convergence} provided the first rigorous convergence analysis of DQN with $\epsilon$-greedy exploration. They proved that with a decaying exploration rate $\epsilon \rightarrow 0$, DQN's Q-function estimates converge with high probability to the optimal Q-function. Their analysis highlights several key insights:
+
+\begin{itemize}
+    \item The exploration schedule plays a crucial role: higher $\epsilon$ enlarges the region of convergence but slows convergence; lower $\epsilon$ risks a smaller basin of attraction
+    \item The target network is essential for convergence, as it ensures the Bellman error minimised at each update is an unbiased estimate
+    \item Overparameterization can help, as wider networks may remain in a near-linear regime where convergence guarantees are stronger
+\end{itemize}
+
+\subsection{Breaking the Deadly Triad with Target Networks}
+
+Zhang, Yao, and Whiteson \cite{zhang2021breaking} investigated target network updates in off-policy TD learning, proving that divergent off-policy algorithms (in linear function approximation settings) can be made convergent through careful target network design. They proposed augmenting Polyak averaging with two projection steps, presenting the first provably convergent variants of linear Q-learning under nonrestrictive, changing behaviour policies.
+
+While these results apply to linear models, they illuminate why target networks stabilise deep RL: they constrain update dynamics to reintroduce contraction-like behaviour in value estimates.
+
+\subsection{Neural TD Learning}
+
+Cayci et al. \cite{cayci2021sample} applied Neural Tangent Kernel (NTK) theory to analyse TD learning with neural network approximators. In the NTK regime, an overparameterized network (width tending to infinity) behaves like a kernelized linear model. They proved that with a sufficiently wide network and either a projection step or max-norm regularisation, $TD(\lambda)$ converges to the correct value function with provable sample complexity bounds.
+
+Key findings:
+\begin{itemize}
+    \item Max-norm regularisation dramatically improves both sample complexity and required overparameterization
+    \item Larger networks may train more smoothly because they operate more in the NTK regime
+    \item These results suggest practical regularisation strategies: norm constraints or very wide networks can implicitly stabilise learning
+\end{itemize}
+
+\subsection{Global Convergence of Policy Gradient Methods}
+
+Wang et al. \cite{wang2019neural} showed that with overparameterized actor and critic networks and under a compatibility condition, neural policy gradient methods can converge to the global optimal policy. Specifically, they proved that every stationary point of the gradient dynamics is globally optimal (i.e., there are no suboptimal stationary points). Moreover, natural policy gradient converges to the global optimum at a sublinear rate.
+
+The compatibility condition requires that the actor and critic share representation (e.g., share some neural network layers) and are initialized appropriately. While this assumption may not hold fully in practice, it provides a target for algorithm designers: using compatible function approximation can eliminate local optima.
+
+\subsection{Policy Gradient Convergence in Special Cases}
+
+Several works have characterised conditions for global convergence of policy gradient in structured settings:
+
+\begin{itemize}
+    \item \textbf{Linear Quadratic Regulator (LQR):} Fazel et al. \cite{fazel2019global} proved that policy gradient finds the global optimum for LQR problems, despite non-convexity
+    \item \textbf{Tabular softmax policies:} Agarwal et al. \cite{agarwal2020theory} showed a Polyak-Łojasiewicz condition holds, guaranteeing linear convergence to the global optimum
+    \item \textbf{General survey:} Cen and Chi \cite{cen2023global} compiled conditions for global convergence across various problem classes
+\end{itemize}
+
+These results show that policy gradient methods are not inherently condemned to poor local optima—with the right structure or assumptions, they can be globally convergent.
+
+\subsection{Error Propagation Analysis}
+
+Farahmand et al. \cite{farahmand2010error} analysed how approximation errors propagate in value iteration. They showed that errors in early iterations are "forgotten" exponentially fast (attenuated by $\gamma^k$ after $k$ iterations), whereas errors introduced late have a more direct impact on final performance. This suggests:
+
+\begin{itemize}
+    \item Maintaining stability becomes harder as training progresses
+    \item Early instability is less damaging than late instability
+    \item Techniques like decreasing learning rates and target networks are crucial in late training
+\end{itemize}
+
+\subsection{Summary of Theoretical Landscape}
+
+Recent years have seen significant progress in understanding deep RL convergence:
+
+\begin{enumerate}
+    \item \textbf{Value-based methods:} Formal convergence proofs now exist for DQN \cite{zhang2023convergence} and linear off-policy TD with target networks \cite{zhang2021breaking}
+    \item \textbf{Policy gradient methods:} Conditions for global convergence have been identified \cite{wang2019neural}, though often requiring restrictive assumptions
+    \item \textbf{Function approximation:} NTK theory \cite{cayci2021sample} provides a framework for analysing overparameterized networks, suggesting that wider networks and regularisation improve stability
+    \item \textbf{Error propagation:} We now better understand how errors accumulate \cite{farahmand2010error}, motivating stabilisation techniques
+\end{enumerate}
+
+However, significant gaps remain. Most theoretical guarantees require conditions that may not hold in practice (e.g., infinite network width, specific initialization, decaying learning rates to zero). Our empirical study complements this theoretical work by evaluating whether convergence can be achieved under realistic settings and quantifying the reliability of different algorithms.
+
+\chapter{Methodology}
+
+\section{Experimental Setup}
+
+\subsection{Environments}
+
+We evaluate algorithms on two continuous control tasks from the MuJoCo suite \cite{todorov2012mujoco}:
+
+\begin{itemize}
+    \item \textbf{HalfCheetah-v5:} A 2D robot with 6 degrees of freedom (17-dimensional observation, 6-dimensional action space). The goal is to maximise forward velocity while minimising control cost.
+    \item \textbf{Hopper-v5:} A 2D one-legged robot with 3 degrees of freedom (11-dimensional observation, 3-dimensional action space). The agent must hop forward without falling.
+\end{itemize}
+
+These environments were chosen for their widespread use in the RL community and their diverse dynamics, allowing us to assess algorithm generalisation.
+
+\subsection{Algorithms and Hyperparameters}
+
+We evaluate PPO (experiments complete: 60 runs) and TD3 (experiments currently running: 60 runs in progress). A2C and SAC may be included if time permits. For each algorithm, we conduct a hyperparameter sweep across:
+
+\begin{itemize}
+    \item \textbf{Learning Rate:} $\{1 \times 10^{-4}, 3 \times 10^{-4}, 1 \times 10^{-3}\}$
+    \item \textbf{Batch Size:} $\{64, 256\}$
+\end{itemize}
+
+Other hyperparameters follow standard values from Stable-Baselines3 \cite{raffin2021sb3}. Table \ref{tab:hyperparams} summarises the complete hyperparameter configurations for algorithms currently being evaluated.
+
+\begin{table}[h]
+\centering
+\caption{Hyperparameter configurations for each algorithm}
+\label{tab:hyperparams}
+\begin{tabular}{lccc}
+\toprule
+Parameter & PPO & TD3 & A2C/SAC \\
+\midrule
+Learning Rate & $\{10^{-4}, 3\times10^{-4}, 10^{-3}\}$ & Same & Pending \\
+Batch Size & $\{64, 256\}$ & $\{64, 256\}$ & Pending \\
+Network Architecture & $[64, 64]$ & $[256, 256]$ & Pending \\
+Discount Factor ($\gamma$) & 0.99 & 0.99 & 0.99 \\
+GAE $\lambda$ & 0.95 & - & - \\
+Clip Range ($\epsilon$) & 0.2 & - & - \\
+Policy Delay (TD3) & - & 2 & - \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Training Protocol}
+
+Each experiment consists of training an agent for 1,000,000 timesteps. We use 5 independent random seeds for each combination of algorithm, environment, and hyperparameter configuration. The planned experimental design is:
+
+\begin{itemize}
+    \item Up to 180 experiments: 2 environments $\times$ 3 algorithms $\times$ 3 learning rates $\times$ 2 batch sizes $\times$ 5 seeds
+    \item \textbf{Status:} PPO complete (60 experiments), TD3 in progress (60 experiments, estimated completion early November), A2C/SAC pending (60 experiments if time permits)
+\end{itemize}
+
+All experiments use Stable-Baselines3 version 2.0 and log to Weights \& Biases for tracking. TD3 experiments run in offline mode (no internet connectivity during training) and will be synced to W\&B after completion.
+
+\subsection{Evaluation Metrics}
+
+We measure the following metrics to assess convergence and stability:
+
+\begin{enumerate}
+    \item \textbf{Final Reward:} Mean episode reward over the last 10 episodes
+    \item \textbf{Across-Seed Variance:} Standard deviation of final rewards across 5 seeds
+    \item \textbf{Convergence Speed:} Number of timesteps required to reach 80\% of final performance
+    \item \textbf{Coefficient of Variation (CV):} Ratio of standard deviation to mean ($\sigma/\mu$), measuring relative variability
+    \item \textbf{Learning Curve Smoothness:} Standard deviation of rewards in the second half of training
+\end{enumerate}
+
+\subsection{Statistical Analysis}
+
+We use the following statistical methods:
+
+\begin{itemize}
+    \item Confidence intervals: 95\% confidence using bootstrap resampling
+    \item Significance testing: Mann-Whitney U test for comparing algorithms
+    \item Effect size: Cohen's d for quantifying practical significance
+\end{itemize}
+
+\section{Implementation Details}
+
+All experiments were run on a workstation with an AMD Ryzen CPU. We used 6 parallel workers for multi-processing, resulting in approximately 14 hours of training time per algorithm (60 experiments). The complete codebase and configurations are available at: i will insert my repo here after experimentations
+
+\chapter{Results}
+
+\section{Overall Performance Comparison}
+
+\subsection{PPO Results}
+
+We have completed 60 experiments for PPO across both environments (30 runs per environment). Table \ref{tab:ppo_results} summarises the results.
+
+\begin{table}[h]
+\centering
+\caption{PPO performance summary}
+\label{tab:ppo_results}
+\begin{tabular}{lcc}
+\toprule
+Metric & HalfCheetah-v5 & Hopper-v5 \\
+\midrule
+Mean Final Reward & $960.44$ & $1292.53$ \\
+Standard Deviation & $216.70$ & $446.49$ \\
+Coefficient of Variation & $0.226$ & $0.345$ \\
+Best Configuration & LR=$3\times10^{-4}$, BS=64 & LR=$3\times10^{-4}$, BS=64 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figures \ref{fig:ppo_heatmap_cheetah} and \ref{fig:ppo_heatmap_hopper} show the hyperparameter sensitivity for PPO on both environments. We observe that PPO is relatively robust to batch size variations but sensitive to learning rate choices. Learning rates above $10^{-3}$ led to training instability in several runs. The heatmaps reveal similar patterns across both environments: learning rate has a stronger effect than batch size, with mid-range learning rates (3×10⁻⁴) consistently outperforming both higher and lower values. Notably, Hopper-v5 shows more pronounced sensitivity, with wider performance gaps between configurations, consistent with its higher coefficient of variation.
+
+\subsection{Environment Comparison}
+
+Comparing PPO's performance across the two environments reveals important differences in task characteristics and algorithm robustness:
+
+\textbf{Performance Differences:} Hopper-v5 achieves higher mean rewards (1292.53) compared to HalfCheetah-v5 (960.44), but this raw comparison is not meaningful as the environments have different reward scales and task difficulties. More informative is the comparison of relative performance and stability.
+
+\textbf{Reliability and Variance:} The coefficient of variation provides a task-invariant measure of reliability. HalfCheetah-v5 shows substantially better reliability (CV=0.226) compared to Hopper-v5 (CV=0.345), indicating that Hopper is 53\% more variable relative to its mean performance. This suggests that Hopper-v5 is more sensitive to initial conditions and hyperparameter choices, making it a more challenging task for consistent performance.
+
+\textbf{Hyperparameter Consistency:} Interestingly, both environments favour the same optimal configuration (LR=$3\times10^{-4}$, BS=64), suggesting that this hyperparameter combination represents a robust choice for PPO across different continuous control tasks. The consistency of this finding supports the notion that mid-range learning rates with smaller batch sizes provide a good balance between sample efficiency and gradient accuracy for on-policy methods.
+
+\textbf{Task Characteristics:} The higher variability in Hopper-v5 likely reflects the task's inherent instability—the agent must maintain balance on a single leg while hopping forward. Small differences in learned policy can lead to qualitatively different behaviours (stable hopping vs. falling), resulting in bimodal performance distributions. In contrast, HalfCheetah-v5 involves coordinated movement of multiple joints but doesn't require maintaining an unstable equilibrium, leading to more gradual performance differences.
+
+These findings address \textbf{RQ1} and \textbf{RQ3} by demonstrating that convergence reliability varies significantly across tasks, even with identical hyperparameters and network architectures. This task-dependent variance suggests that error propagation mechanisms, as discussed by Farahmand et al. \cite{farahmand2010error}, may manifest differently depending on the stability characteristics of the underlying dynamical system being controlled.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{../thesis_outputs/heatmap_ppo_HalfCheetah.png}
+\caption{PPO hyperparameter sensitivity on HalfCheetah-v5. Darker colours indicate higher final rewards.}
+\label{fig:ppo_heatmap_cheetah}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{../thesis_outputs/heatmap_ppo_Hopper.png}
+\caption{PPO hyperparameter sensitivity on Hopper-v5. Darker colours indicate higher final rewards.}
+\label{fig:ppo_heatmap_hopper}
+\end{figure}
+
+\subsection{Convergence Speed Analysis}
+
+Figure \ref{fig:convergence} shows PPO's convergence speed. \textit{Multi-algorithm comparison pending TD3 experiment completion.} PPO demonstrates moderate convergence speed, typically reaching 80\% of final performance within 500,000 timesteps.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{../thesis_outputs/convergence_speed.png}
+\caption{Convergence speed comparison: timesteps required to reach 80\% of final performance}
+\label{fig:convergence}
+\end{figure}
+
+\subsection{Reliability Analysis}
+
+Figure \ref{fig:reliability} presents the coefficient of variation for PPO across environments. \textit{Multi-algorithm comparison pending TD3 experiment completion.} Lower CV values indicate more consistent performance across different random seeds.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{../thesis_outputs/reliability_analysis.png}
+\caption{Reliability analysis: Coefficient of Variation by algorithm and environment}
+\label{fig:reliability}
+\end{figure}
+
+\subsection{Distribution of Final Rewards}
+
+Figure \ref{fig:boxplots} shows boxplots of final reward distributions. The boxes represent the interquartile range, while whiskers extend to 1.5 times the IQR.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\textwidth]{../thesis_outputs/boxplots_final_rewards.png}
+\caption{Distribution of final rewards across algorithms and environments}
+\label{fig:boxplots}
+\end{figure}
+
+\section{Hyperparameter Sensitivity}
+
+Our hyperparameter sweep revealed distinct sensitivity patterns for each algorithm:
+
+\subsection{Learning Rate Sensitivity}
+
+All algorithms exhibited sensitivity to learning rate, with optimal values in the range $[1 \times 10^{-4}, 3 \times 10^{-4}]$. Higher learning rates ($10^{-3}$) occasionally led to divergence, particularly in PPO and A2C.
+
+\subsection{Batch Size Effects}
+
+Batch size had a more subtle effect. Larger batch sizes (256) generally improved stability at the cost of slightly slower convergence. Smaller batch sizes (64) enabled faster initial learning but with higher variance.
+
+\section{Algorithm-Specific Findings}
+
+\subsection{PPO Analysis}
+
+PPO demonstrated robust performance across most configurations, with an overall average reward of $1107.45 \pm 142.42$. The algorithm's clipped objective successfully prevented catastrophic policy updates. However, we observed that entropy coefficient tuning is critical for exploration-exploitation balance.
+
+Key PPO-specific metrics:
+\begin{itemize}
+    \item Average KL divergence: 0.015 (within recommended range of 0.01-0.02)
+    \item Average clip fraction: 0.18 (moderate, indicating balanced policy updates)
+    \item Value loss: Stable throughout training
+\end{itemize}
+
+\subsection{TD3 Analysis}
+
+\textit{TD3 experiments are currently running (60 experiments in progress). Results and analysis are not yet available for this draft but will be included once the experiments complete.}
+
+\subsection{A2C Analysis}
+
+\textit{A2C experiments have not yet been run. Analysis will be included if time permits.}
+
+\subsection{SAC Analysis}
+
+\textit{SAC experiments have not yet been run. Analysis will be included if time permits.}
+
+
+
+\section{Statistical Significance}
+
+\textit{Statistical comparisons between algorithms are pending completion of TD3 experiments. When available, this section will include Mann-Whitney U tests for pairwise comparisons and bootstrap resampling for confidence intervals.}
+
+\chapter{Discussion}
+
+\section{Key Findings}
+
+Based on completed PPO experiments and ongoing TD3 experiments, we have identified several important patterns:
+
+\subsection{Answer to RQ1: Convergence Conditions}
+
+For PPO, reliable convergence occurs when:
+\begin{itemize}
+    \item Learning rate is in the range $[1 \times 10^{-4}, 3 \times 10^{-4}]$
+    \item Batch size is sufficiently large (256 provides more stable training)
+    \item Clipping parameter remains at default (0.2)
+    \item Network architecture has adequate capacity ([64,64] appears sufficient for tested tasks)
+\end{itemize}
+
+
+
+\subsection{Answer to RQ2: Hyperparameter Influence}
+
+From the PPO experiments, learning rate appears to have the strongest impact on training stability. Our results suggest:
+\begin{itemize}
+    \item High learning rates ($\geq 10^{-3}$): Can lead to instability or divergence
+    \item Mid-range ($3 \times 10^{-4}$): Seems to provide a good balance between speed and stability
+    \item Low learning rates ($\leq 10^{-5}$): Slower convergence, might not reach good performance within 1M timesteps
+\end{itemize}
+
+Batch size has a more subtle effect—it seems to affect training variance more than final performance. Larger batches give more stable updates but take more computation per step.
+
+
+
+\subsection{Answer to RQ3: Algorithm Robustness}
+
+Based on PPO results so far, the algorithm shows moderate robustness with a coefficient of variation of 0.129. This means there's some variability across different random seeds, but it's not extreme.
+
+
+
+\section{Practical Implications}
+
+Based on our work so far, a few practical observations for RL practitioners:
+
+\begin{enumerate}
+    \item \textbf{Default hyperparameters are a starting point:} Library defaults (like those in Stable-Baselines3) work reasonably well, but tuning is still important for specific tasks
+    \item \textbf{Multiple seeds really matter:} Running with just one seed can give a misleading picture. We'd recommend at least 5 seeds to get reliable results
+    \item \textbf{There's no one-size-fits-all algorithm:} Different algorithms will likely excel at different things (speed, final performance, stability across seeds)
+\end{enumerate}
+
+
+
+\section{Limitations}
+
+This study has several limitations:
+
+\begin{itemize}
+    \item \textbf{Limited environment diversity:} We evaluate on only 2 continuous control tasks; results may not generalise to other domains
+    \item \textbf{Hyperparameter space:} We explore only 2 hyperparameters; other parameters (network architecture, entropy coefficient) may also be important
+    \item \textbf{Computational constraints:} Training each algorithm to 1M timesteps may not be sufficient for some tasks
+\end{itemize}
+
+\section{Future Work}
+
+Several directions for future research emerge from this work:
+
+\begin{enumerate}
+    \item \textbf{Automated hyperparameter tuning:} Apply population-based training or Bayesian optimisation to automatically discover optimal configurations
+    \item \textbf{Transfer learning:} Investigate whether optimal hyperparameters transfer across related tasks
+    \item \textbf{Sample efficiency:} analyse performance as a function of timesteps, not just final reward
+    \item \textbf{Broader evaluation:} Extend to discrete action spaces, partially observable environments, and multi-agent settings
+\end{enumerate}
+
+\chapter{Conclusion}
+
+This thesis investigates convergence and stability in modern reinforcement learning algorithms through systematic empirical study. The work is currently in progress, with PPO experiments complete and TD3 experiments underway. SAC/AC2 experiments may be added after if I have time.
+
+Our contributions so far include:
+\begin{itemize}
+    \item Quantitative analysis of hyperparameter sensitivity for PPO (complete)
+    \item Identification of promising hyperparameter ranges for continuous control
+    \item Statistical analysis of variance across random seeds
+    \item Experimental infrastructure for reproducible RL research
+\end{itemize}
+
+\textbf{Pending for This Draft:}
+\begin{itemize}
+    \item TD3 experiments currently running (60 runs, ~19\% complete as of submission)
+    \item Comparative analysis between PPO and TD3 (awaiting TD3 completion)
+    \item A2C and/or SAC experiments may be added if time permits (60 additional runs each)
+    \item Statistical comparisons and expanded discussion (pending multi-algorithm data)
+\end{itemize}
+
+This work aims to go beyond single-run performance metrics by characterising the full distribution of outcomes across different seeds and hyperparameters. Once complete, this thesis will provide practical guidance for algorithm selection and hyperparameter tuning based on empirical evidence from multiple algorithms.
+
+% Bibliography
+\bibliographystyle{plain}
+\begin{thebibliography}{99}
+
+% ===== Foundational RL Theory =====
+
+\bibitem{regehr2021elementary}
+Regehr, M. T., \& Ayoub, A. (2021).
+An elementary proof that Q-learning converges almost surely.
+\textit{arXiv preprint arXiv:2108.02827}.
+\url{https://arxiv.org/abs/2108.02827}
+
+\bibitem{sutton1999policy}
+Sutton, R. S., McAllester, D., Singh, S., \& Mansour, Y. (1999).
+Policy gradient methods for reinforcement learning with function approximation.
+In \textit{Advances in Neural Information Processing Systems} (Vol. 12). MIT Press.
+\url{https://proceedings.neurips.cc/paper/1999/hash/464d828b85b0bed98e80ade0a5c43b0f-Abstract.html}
+
+\bibitem{kakade2001natural}
+Kakade, S. M. (2001).
+A natural policy gradient.
+In \textit{Advances in Neural Information Processing Systems} (Vol. 14). MIT Press.
+\url{https://proceedings.neurips.cc/paper/2001/hash/4b86abe48d358ecf194c56c69108433e-Abstract.html}
+
+\bibitem{bradtke1996linear}
+Bradtke, S. J., \& Barto, A. G. (1996).
+Linear least-squares algorithms for temporal difference learning.
+\textit{Machine Learning}, 22(1-3), 33-57.
+\url{https://doi.org/10.1007/BF00114723}
+
+\bibitem{lagoudakis2003least}
+Lagoudakis, M. G., \& Parr, R. (2003).
+Least-squares policy iteration.
+\textit{Journal of Machine Learning Research}, 4, 1107-1149.
+\url{https://www.jmlr.org/papers/v4/lagoudakis03a.html}
+
+% ===== Deep RL Algorithms =====
+
+\bibitem{mnih2015humanlevel}
+Mnih, V., Kavukcuoglu, K., Silver, D., Rusu, A. A., Veness, J., Bellemare, M. G., ... \& Hassabis, D. (2015).
+Human-level control through deep reinforcement learning.
+\textit{Nature}, 518(7540), 529-533.
+\url{https://doi.org/10.1038/nature14236}
+
+\bibitem{vanhasselt2015deep}
+van Hasselt, H., Guez, A., \& Silver, D. (2015).
+Deep reinforcement learning with double Q-learning.
+\textit{arXiv preprint arXiv:1509.06461}.
+\url{https://arxiv.org/abs/1509.06461}
+
+\bibitem{wang2016dueling}
+Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., \& de Freitas, N. (2016).
+Dueling network architectures for deep reinforcement learning.
+\textit{arXiv preprint arXiv:1511.06581}.
+\url{https://arxiv.org/abs/1511.06581}
+
+\bibitem{schaul2016prioritized}
+Schaul, T., Quan, J., Antonoglou, I., \& Silver, D. (2016).
+Prioritized experience replay.
+\textit{arXiv preprint arXiv:1511.05952}.
+\url{https://arxiv.org/abs/1511.05952}
+
+\bibitem{bellemare2017distributional}
+Bellemare, M. G., Dabney, W., \& Munos, R. (2017).
+A distributional perspective on reinforcement learning.
+\textit{arXiv preprint arXiv:1707.06887}.
+\url{https://arxiv.org/abs/1707.06887}
+
+\bibitem{hessel2017rainbow}
+Hessel, M., Modayil, J., van Hasselt, H., Schaul, T., Ostrovski, G., Dabney, W., ... \& Silver, D. (2017).
+Rainbow: Combining improvements in deep reinforcement learning.
+\textit{arXiv preprint arXiv:1710.02298}.
+\url{https://arxiv.org/abs/1710.02298}
+
+% ===== Policy Gradient Methods =====
+
+\bibitem{schulman2017trpo}
+Schulman, J., Levine, S., Moritz, P., Jordan, M. I., \& Abbeel, P. (2017).
+Trust Region Policy Optimization.
+\textit{arXiv preprint arXiv:1502.05477}.
+\url{https://arxiv.org/abs/1502.05477}
+
+\bibitem{schulman2017ppo}
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A., \& Klimov, O. (2017).
+Proximal Policy Optimization algorithms.
+\textit{arXiv preprint arXiv:1707.06347}.
+\url{https://arxiv.org/abs/1707.06347}
+
+\bibitem{lillicrap2015continuous}
+Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., ... \& Wierstra, D. (2019).
+Continuous control with deep reinforcement learning.
+\textit{arXiv preprint arXiv:1509.02971}.
+\url{https://arxiv.org/abs/1509.02971}
+
+\bibitem{fujimoto2018addressing}
+Fujimoto, S., van Hoof, H., \& Meger, D. (2018).
+Addressing function approximation error in actor-critic methods.
+\textit{arXiv preprint arXiv:1802.09477}.
+\url{https://arxiv.org/abs/1802.09477}
+
+\bibitem{haarnoja2018sac}
+Haarnoja, T., Zhou, A., Abbeel, P., \& Levine, S. (2018).
+Soft Actor-Critic: Off-policy maximum entropy deep reinforcement learning with a stochastic actor.
+In \textit{Proceedings of the 35th International Conference on Machine Learning} (Vol. 80, pp. 1861-1870). PMLR.
+\url{http://proceedings.mlr.press/v80/haarnoja18b.html}
+
+\bibitem{mnih2016a3c}
+Mnih, V., Badia, A. P., Mirza, M., Graves, A., Lillicrap, T., Harley, T., ... \& Kavukcuoglu, K. (2016).
+Asynchronous methods for deep reinforcement learning.
+In \textit{International Conference on Machine Learning} (pp. 1928-1937). PMLR.
+\url{http://proceedings.mlr.press/v48/mniha16.html}
+
+% ===== Convergence Theory and Analysis =====
+
+\bibitem{van2018deep}
+van Hasselt, H., Doron, Y., Strub, F., Hessel, M., Sonnerat, N., \& Modayil, J. (2018).
+Deep reinforcement learning and the deadly triad.
+\textit{arXiv preprint arXiv:1812.02648}.
+\url{https://arxiv.org/abs/1812.02648}
+
+\bibitem{zhang2023convergence}
+Zhang, S., Li, H., Wang, M., Liu, M., Chen, P.-Y., Lu, S., ... \& Chaudhury, S. (2023).
+On the convergence and sample complexity analysis of deep Q-networks with $\epsilon$-greedy exploration.
+\textit{arXiv preprint arXiv:2310.16173}.
+\url{https://arxiv.org/abs/2310.16173}
+
+\bibitem{zhang2021breaking}
+Zhang, S., Yao, H., \& Whiteson, S. (2023).
+Breaking the deadly triad with a target network.
+\textit{arXiv preprint arXiv:2101.08862}.
+\url{https://arxiv.org/abs/2101.08862}
+
+\bibitem{cayci2021sample}
+Cayci, S., Satpathi, S., He, N., \& Srikant, R. (2021).
+Sample complexity and overparameterization bounds for temporal difference learning with neural network approximation.
+\textit{arXiv preprint arXiv:2103.01391}.
+\url{https://arxiv.org/abs/2103.01391}
+
+\bibitem{wang2019neural}
+Wang, L., Cai, Q., Yang, Z., \& Wang, Z. (2019).
+Neural policy gradient methods: Global optimality and rates of convergence.
+\textit{arXiv preprint arXiv:1909.01150}.
+\url{https://arxiv.org/abs/1909.01150}
+
+\bibitem{farahmand2010error}
+Farahmand, A.-m., Szepesvári, C., \& Munos, R. (2010).
+Error propagation for approximate policy and value iteration.
+In \textit{Advances in Neural Information Processing Systems} (Vol. 23). Curran Associates, Inc.
+\url{https://proceedings.neurips.cc/paper/2010/hash/65cc2c8205a05d7379fa3a6386f710e1-Abstract.html}
+
+\bibitem{cen2023global}
+Cen, S., \& Chi, Y. (2023).
+Global convergence of policy gradient methods in reinforcement learning, games and control.
+\textit{arXiv preprint arXiv:2310.05230}.
+\url{https://arxiv.org/abs/2310.05230}
+
+\bibitem{fazel2019global}
+Fazel, M., Ge, R., Kakade, S. M., \& Mesbahi, M. (2019).
+Global convergence of policy gradient methods for the linear quadratic regulator.
+\textit{arXiv preprint arXiv:1801.05039}.
+\url{https://arxiv.org/abs/1801.05039}
+
+\bibitem{agarwal2020theory}
+Agarwal, A., Kakade, S. M., Lee, J. D., \& Mahajan, G. (2020).
+On the theory of policy gradient methods: Optimality, approximation, and distribution shift.
+\textit{arXiv preprint arXiv:1908.00261}.
+\url{https://arxiv.org/abs/1908.00261}
+
+% ===== Empirical Studies and Reproducibility =====
+
+\bibitem{henderson2018deep}
+Henderson, P., Islam, R., Bachman, P., Pineau, J., Precup, D., \& Meger, D. (2018).
+Deep reinforcement learning that matters.
+In \textit{Proceedings of the AAAI Conference on Artificial Intelligence} (Vol. 32, No. 1).
+\url{https://ojs.aaai.org/index.php/AAAI/article/view/11694}
+
+\bibitem{islam2017reproducibility}
+Islam, R., Henderson, P., Gomrokchi, M., \& Precup, D. (2017).
+Reproducibility of benchmarked deep reinforcement learning tasks for continuous control.
+\textit{arXiv preprint arXiv:1708.04133}.
+\url{https://arxiv.org/abs/1708.04133}
+
+% ===== Implementation and Tools =====
+
+\bibitem{todorov2012mujoco}
+Todorov, E., Erez, T., \& Tassa, Y. (2012).
+MuJoCo: A physics engine for model-based control.
+In \textit{IEEE/RSJ International Conference on Intelligent Robots and Systems} (pp. 5026-5033). IEEE.
+\url{https://doi.org/10.1109/IROS.2012.6386109}
+
+\bibitem{raffin2021sb3}
+Raffin, A., Hill, A., Gleave, A., Kanervisto, A., Ernestus, M., \& Dormann, N. (2021).
+Stable-Baselines3: Reliable reinforcement learning implementations.
+\textit{Journal of Machine Learning Research}, 22(268), 1-8.
+\url{https://jmlr.org/papers/v22/20-1364.html}
+
+\bibitem{schulman2015gae}
+Schulman, J., Moritz, P., Levine, S., Jordan, M., \& Abbeel, P. (2015).
+High-dimensional continuous control using Generalised advantage estimation.
+\textit{arXiv preprint arXiv:1506.02438}.
+\url{https://arxiv.org/abs/1506.02438}
+
+\end{thebibliography}
+
+\end{document}

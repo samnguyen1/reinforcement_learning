@@ -1,0 +1,69 @@
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv
+
+# Editors / build dirs
+*.acn
+*.acr
+*.alg
+*.glg
+*.glo
+*.gls
+*.ist
+*.maf
+*.mtc
+*.mtc0
+*.nav
+*.nlo
+*.snm
+*.vrb
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Python
+.venv/
+.winvenv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Experiment outputs
+logs/
+models/
+wandb/
+thesis_data_export/
+thesis_outputs/
+thesis_analysis/
+*_results.txt
+*_log.txt
+openrl_benchmark_data/
+wandb_exports*/
+
+# Temporary files
+nul
+*.tmp
+
+# Mac / Windows system files
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
