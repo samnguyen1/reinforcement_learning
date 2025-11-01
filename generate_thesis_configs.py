@@ -122,7 +122,16 @@ def generate_td3_configs():
     return configs
 
 def generate_sac_configs():
-    """Generate SAC configurations"""
+    """Generate SAC configurations
+
+    SAC-specific parameters:
+    - ent_coef: 'auto' for automatic entropy tuning (key SAC feature)
+    - train_freq: how often to train (1 = every step)
+    - gradient_steps: how many gradient steps per update
+    - learning_starts: timesteps before training starts
+    - buffer_size: replay buffer size
+    - tau: soft update coefficient for target networks
+    """
     configs = []
 
     for env, lr, bs, seed in product(ENVIRONMENTS, LEARNING_RATES, BATCH_SIZES, SEEDS):
@@ -138,12 +147,16 @@ def generate_sac_configs():
             'algo_params': {
                 'learning_rate': lr,
                 'batch_size': bs,
+                'buffer_size': 1000000,
+                'learning_starts': 10000,
                 'gamma': 0.99,
                 'tau': 0.005,
-                'ent_coef': 'auto',
                 'train_freq': 1,
                 'gradient_steps': 1,
-                'learning_starts': 10000,
+                'ent_coef': 'auto',
+                'target_update_interval': 1,
+                'use_sde': False,
+                'use_sde_at_warmup': False,
             }
         }
 
