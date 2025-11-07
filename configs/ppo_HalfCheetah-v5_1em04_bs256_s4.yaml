@@ -1,0 +1,18 @@
+algorithm: ppo
+env_id: HalfCheetah-v5
+seed: 4
+total_timesteps: 1000000
+policy: MlpPolicy
+verbose: 0
+checkpoint_freq: 0
+eval_freq: 0
+algo_params:
+  learning_rate: 0.0001
+  batch_size: 256
+  n_steps: 2048
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.0
+  vf_coef: 0.5
+  max_grad_norm: 0.5
